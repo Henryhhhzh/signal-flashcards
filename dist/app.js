@@ -1,8 +1,9 @@
+import {moveToPile, updateSetDetails, groupSets} from './organize.js';
 import {parseCSV, columnsFor, prepareSession, gradeCard} from './core.js';
 const $ = id => document.getElementById(id);
 const STORAGE = 'signal-flashcards-v1';
 const labels = {red: ['Learning', 'Give these a little more time'], amber: ['Getting there', 'A little practice goes a long way'], green: ['Got it', 'Keep your knowledge fresh']};
-let state = {sets: [], selected: null}, pending = null, undo = null;
+let state = {sets: [], selected: null}, pending = null, undo = null, draggedCard = null, editingSet = null;
 try {
   const saved = JSON.parse(localStorage.getItem(STORAGE));
   if (saved && Array.isArray(saved.sets)) state = saved;
@@ -19,15 +20,26 @@ function toast(message) { $('toast').textContent = message; $('toast').classList
 function render() {
   const set = current();
   $('set-count').textContent = state.sets.length;
-  $('library').innerHTML = state.sets.map(s => `<button class="set-item ${s.id === state.selected ? 'active' : ''}" data-set="${esc(s.id)}" ${s.id === state.selected ? 'aria-current="true"' : ''}><span class="set-icon">▤</span><span><strong>${esc(s.name)}</strong><small>${s.cards.length} cards · ${Math.round(s.cards.filter(c => c.pile === 'green').length / s.cards.length * 100)}% green</small></span></button>`).join('');
+  $('library').innerHTML = groupSets(state.sets).map(group => `<section class="library-group"><h3>${esc(group.name || 'Ungrouped')}<span>${group.sets.length}</span></h3>${group.sets.map(s => `<button class="set-item ${s.id === state.selected ? 'active' : ''}" data-set="${esc(s.id)}" ${s.id === state.selected ? 'aria-current="true"' : ''}><span class="set-icon">▤</span><span><strong>${esc(s.name)}</strong><small>${s.cards.length} cards · ${Math.round(s.cards.filter(c => c.pile === 'green').length / s.cards.length * 100)}% green</small></span></button>`).join('')}</section>`).join('');
+  const boardVisible = !!set && state.view === 'board';
+  document.body.classList.toggle('board-view', boardVisible);
+  $('board').hidden = !boardVisible;
+  $('study').hidden = boardVisible;
+  $('study-footer').hidden = boardVisible;
+  $('shuffle-note').hidden = boardVisible || !set;
+  $('edit-set').hidden = !set;
+  $('view-toolbar').hidden = !set;
+  $('study-view').setAttribute('aria-pressed', String(!boardVisible));
+  $('board-view').setAttribute('aria-pressed', String(boardVisible));
   $('set-label').textContent = set ? 'YOUR STUDY SPACE' : 'LET’S GET STARTED';
   $('set-title').textContent = set?.name || 'A fresh start.';
   $('set-subtitle').textContent = set ? `${set.cards.length} cards · Right moves you up. Wrong returns to Learning.` : 'Bring your NotebookLM flashcards along.';
-  $('piles').innerHTML = Object.entries(labels).map(([key, [title, hint]]) => `<div class="pile ${key}" aria-label="${title}, ${set?.cards.filter(c => c.pile === key).length || 0} cards"><span class="light"></span><span><strong>${title}</strong><small>${hint}</small></span><span class="count">${set?.cards.filter(c => c.pile === key).length || 0}</span></div>`).join('');
+  $('piles').innerHTML = Object.entries(labels).map(([key, [title, hint]]) => `<button class="pile ${key}" data-open-pile="${key}" ${set ? '' : 'disabled'} aria-label="Open ${title} list, ${set?.cards.filter(c => c.pile === key).length || 0} cards"><span class="light"></span><span><strong>${title}</strong><small>${hint}</small></span><span class="count">${set?.cards.filter(c => c.pile === key).length || 0}</span></button>`).join('');
   if (!set) {
     $('study').innerHTML = `<div class="card-content empty"><div class="empty-icon">▤</div><h3>Your next lightbulb moment starts here.</h3><p>Import your NotebookLM CSV and turn what you’ve learned into what you remember.</p><button class="button dark" data-action="import">Import your first set ↗</button><br><button class="text-button" data-action="demo">Take a look with a sample set</button></div>`;
     $('session-note').textContent = 'Small steps add up.'; return;
   }
+  if (boardVisible) { renderBoard(set); return; }
   const session = set.session;
   const card = set.cards.find(c => c.id === session.current);
   if (!card) {
@@ -100,9 +112,86 @@ $('confirm-import').onclick = () => {
   addSet($('set-name').value.trim() || 'Untitled set', pairs);
 };
 document.addEventListener('keydown', e => {
-  if ($('import-dialog').open || ['INPUT','SELECT','TEXTAREA','BUTTON','A'].includes(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (state.view === 'board' || $('edit-dialog').open || $('import-dialog').open || ['INPUT','SELECT','TEXTAREA','BUTTON','A'].includes(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); reveal(); }
   if (['1','2'].includes(e.key)) rate(e.key === '1' ? 'wrong' : 'right');
 });
 window.addEventListener('storage', e => { if (e.key === STORAGE && e.newValue) { try { const next = JSON.parse(e.newValue); if (Array.isArray(next.sets)) { state = next; state.sets.forEach(prepareSession); undo = null; render(); } } catch {} } });
 render();
+
+function renderBoard(set) {
+  $('board').innerHTML = `<p class="board-help">Drag a card into another pile, or use its Move to menu. Changes save automatically.</p><div class="board-columns">${Object.entries(labels).map(([pile, [title]]) => {
+    const cards = set.cards.filter(card => card.pile === pile);
+    return `<section class="board-column ${pile}" data-drop-pile="${pile}" aria-labelledby="column-${pile}"><h3 id="column-${pile}" tabindex="-1"><span class="light"></span>${title}<span>${cards.length}</span></h3><div class="board-list">${cards.map(card => `<article class="board-card" id="board-card-${esc(card.id)}" data-card="${esc(card.id)}" draggable="true"><div class="board-card-top"><span>QUESTION</span><span aria-hidden="true">⠿</span></div><p>${esc(card.front)}</p><details><summary>Show answer</summary><div class="board-answer">${esc(card.back)}</div></details><label>Move to<select data-move-card="${esc(card.id)}" aria-label="Move card: ${esc(card.front.slice(0,80))}">${Object.entries(labels).map(([key,[name]]) => `<option value="${key}" ${pile === key ? 'selected' : ''}>${name}</option>`).join('')}</select></label></article>`).join('')}${cards.length ? '' : '<p class="empty-pile">No cards here yet.<br>Drop a card here to move it.</p>'}</div></section>`;
+  }).join('')}</div>`;
+}
+function changeView(view, pile = null) {
+  state.view = view; save(); render();
+  if (view === 'board') $('column-' + (pile || 'red')).focus();
+  else $('study').focus({preventScroll:true});
+}
+$('study-view').onclick = () => changeView('study');
+$('board-view').onclick = () => changeView('board');
+$('piles').onclick = e => {
+  const button = e.target.closest('[data-open-pile]');
+  if (button && current()) changeView('board', button.dataset.openPile);
+};
+function moveBoardCard(id, pile, focusMenu = false) {
+  const set = current();
+  if (!set || !set.cards.some(card => card.id === id)) return;
+  moveToPile(set, id, pile); undo = null; save(); render();
+  const article = document.getElementById('board-card-' + id);
+  if (focusMenu) article?.querySelector('select').focus();
+  toast(`Card moved to ${labels[pile][0]}.`);
+}
+$('board').addEventListener('change', e => {
+  if (e.target.matches('[data-move-card]')) moveBoardCard(e.target.dataset.moveCard, e.target.value, true);
+});
+$('board').addEventListener('dragstart', e => {
+  if (e.target.closest('select, summary, details')) { e.preventDefault(); return; }
+  const card = e.target.closest('[data-card]');
+  if (!card) return;
+  draggedCard = {id: card.dataset.card, set: state.selected};
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', card.dataset.card);
+  card.classList.add('dragging');
+});
+$('board').addEventListener('dragover', e => {
+  const column = e.target.closest('[data-drop-pile]');
+  if (!column || !draggedCard || draggedCard.set !== state.selected) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  $('board').querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+  column.classList.add('drop-target');
+});
+$('board').addEventListener('dragleave', e => {
+  const column = e.target.closest('[data-drop-pile]');
+  if (column && !column.contains(e.relatedTarget)) column.classList.remove('drop-target');
+});
+$('board').addEventListener('drop', e => {
+  const column = e.target.closest('[data-drop-pile]');
+  if (!column || !draggedCard || draggedCard.set !== state.selected) return;
+  e.preventDefault();
+  const id = draggedCard.id; draggedCard = null;
+  moveBoardCard(id, column.dataset.dropPile);
+});
+$('board').addEventListener('dragend', () => {
+  draggedCard = null;
+  $('board').querySelectorAll('.dragging, .drop-target').forEach(el => el.classList.remove('dragging','drop-target'));
+});
+$('edit-set').onclick = () => {
+  const set = current(); if (!set) return;
+  editingSet = set.id;
+  $('edit-name').value = set.name; $('edit-group').value = set.group || '';
+  $('edit-error').textContent = '';
+  $('group-options').innerHTML = [...new Set(state.sets.map(set => set.group).filter(Boolean))].map(name => `<option value="${esc(name)}"></option>`).join('');
+  $('edit-dialog').showModal(); $('edit-name').focus();
+};
+$('close-edit').onclick = () => $('edit-dialog').close();
+$('edit-form').onsubmit = e => {
+  e.preventDefault();
+  if (!state.sets.some(set => set.id === editingSet)) { $('edit-error').textContent = 'This set is no longer available.'; return; }
+  try {
+    updateSetDetails(state, editingSet, $('edit-name').value, $('edit-group').value);
+    undo = null; save(); render(); $('edit-dialog').close(); toast('Set details saved.');
+  } catch (err) { $('edit-error').textContent = err.message; }
+};
