@@ -16,6 +16,12 @@ The next card comes from a weighted random pile: **Learning 9 : Getting there 3 
 
 Sets, pile assignments, the current card, and answer visibility save automatically in `localStorage`. Return using the **same browser, device, and site address** to continue. This is browser-local storage, with no cross-device sync; clearing browser data removes saved progress. CSV files are processed in your browser.
 
+## Deploy to Vercel
+
+Import `Henryhhhzh/signal-flashcards` into your Vercel account and keep the root directory at the repository root. The checked-in `vercel.json` selects no framework, skips building, and serves `dist/`. No environment variables or dependencies are required. Connect the repository to enable automatic deployments from `main`.
+
+Browser storage belongs to each site address. Existing flashcards on the original site remain there; the Vercel address starts with its own library.
+
 ## Run locally
 
 No dependencies or build step are needed. `dist/` contains the maintained HTML, CSS, and JavaScript source.

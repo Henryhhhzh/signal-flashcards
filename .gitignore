@@ -5,3 +5,5 @@ node_modules/
 !.env.example
 .openai/
 *.tar.gz
+
+.vercel/
