@@ -1,4 +1,4 @@
-import {parseCSV, columnsFor, moveCard} from './core.js';
+import {parseCSV, columnsFor, prepareSession, gradeCard} from './core.js';
 const $ = id => document.getElementById(id);
 const STORAGE = 'signal-flashcards-v1';
 const labels = {red: ['Learning', 'Give these a little more time'], amber: ['Getting there', 'A little practice goes a long way'], green: ['Got it', 'Keep your knowledge fresh']};
@@ -6,6 +6,7 @@ let state = {sets: [], selected: null}, pending = null, undo = null;
 try {
   const saved = JSON.parse(localStorage.getItem(STORAGE));
   if (saved && Array.isArray(saved.sets)) state = saved;
+  state.sets.forEach(prepareSession);
 } catch { $('save-state').textContent = 'Storage unavailable'; }
 const esc = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const current = () => state.sets.find(s => s.id === state.selected);
@@ -21,32 +22,30 @@ function render() {
   $('library').innerHTML = state.sets.map(s => `<button class="set-item ${s.id === state.selected ? 'active' : ''}" data-set="${esc(s.id)}" ${s.id === state.selected ? 'aria-current="true"' : ''}><span class="set-icon">▤</span><span><strong>${esc(s.name)}</strong><small>${s.cards.length} cards · ${Math.round(s.cards.filter(c => c.pile === 'green').length / s.cards.length * 100)}% green</small></span></button>`).join('');
   $('set-label').textContent = set ? 'YOUR STUDY SPACE' : 'LET’S GET STARTED';
   $('set-title').textContent = set?.name || 'A fresh start.';
-  $('set-subtitle').textContent = set ? `${set.cards.length} cards · Three piles. One clearer mind.` : 'Bring your NotebookLM flashcards along.';
-  $('piles').innerHTML = Object.entries(labels).map(([key, [title, hint]]) => `<button class="pile ${key} ${set?.session?.pile === key ? 'active' : ''}" data-pile="${key}" aria-pressed="${set?.session?.pile === key}" aria-label="Study ${title}, ${set?.cards.filter(c => c.pile === key).length || 0} cards"><span class="light"></span><span><strong>${title}</strong><small>${hint}</small></span><span class="count">${set?.cards.filter(c => c.pile === key).length || 0}</span></button>`).join('');
+  $('set-subtitle').textContent = set ? `${set.cards.length} cards · Right moves you up. Wrong returns to Learning.` : 'Bring your NotebookLM flashcards along.';
+  $('piles').innerHTML = Object.entries(labels).map(([key, [title, hint]]) => `<div class="pile ${key}" aria-label="${title}, ${set?.cards.filter(c => c.pile === key).length || 0} cards"><span class="light"></span><span><strong>${title}</strong><small>${hint}</small></span><span class="count">${set?.cards.filter(c => c.pile === key).length || 0}</span></div>`).join('');
   if (!set) {
     $('study').innerHTML = `<div class="card-content empty"><div class="empty-icon">▤</div><h3>Your next lightbulb moment starts here.</h3><p>Import your NotebookLM CSV and turn what you’ve learned into what you remember.</p><button class="button dark" data-action="import">Import your first set ↗</button><br><button class="text-button" data-action="demo">Take a look with a sample set</button></div>`;
     $('session-note').textContent = 'Small steps add up.'; return;
   }
   const session = set.session;
-  const card = set.cards.find(c => c.id === session?.queue[0]);
+  const card = set.cards.find(c => c.id === session.current);
   if (!card) {
-    const pile = session?.pile || 'red';
-    const remaining = set.cards.filter(c => c.pile === pile).length;
-    $('study').innerHTML = `<div class="card-content empty"><div class="empty-icon">✓</div><h3>${session?.total ? 'A little progress, well earned.' : 'This pile is clear.'}</h3>${undo ? '<button class="text-button" data-action="undo">↶ Undo last card</button>' : ''}<p>${session?.total ? 'You’ve reviewed every card in this round. Come back for another pass, or choose a different pile above.' : 'Choose another pile above to keep learning.'}</p>${remaining ? `<button class="button dark" data-action="again">Study this pile again · ${remaining} cards</button>` : '<button class="button" data-action="all">Review all cards</button>'}</div>`;
-  } else {
-    $('study').innerHTML = `<div class="study-top"><span>${labels[session.pile]?.[0] || 'All cards'} &nbsp; / &nbsp; ${session.total - session.queue.length + 1} of ${session.total}</span><button data-action="undo" ${undo ? '' : 'disabled'}>↶ Undo last</button></div><div class="card-content"><div class="card-label">${session.revealed ? 'TAKE A MOMENT TO CHECK' : 'THINK IT THROUGH'}</div><div class="question">${esc(card.front)}</div>${session.revealed ? `<div class="answer">${esc(card.back)}</div>` : ''}</div>${session.revealed ? `<div class="ratings">${Object.entries(labels).map(([key,[title]],i) => `<button class="rate ${key}" data-rate="${key}">● &nbsp; ${title}<kbd>${i + 1}</kbd></button>`).join('')}</div>` : '<button class="button dark reveal" data-action="reveal">Reveal answer <span>↵</span></button>'}`;
+    $('study').innerHTML = '<div class="card-content empty"><h3>No cards in this set.</h3><button class="button dark" data-action="import">Import flashcards</button></div>';
+    return;
   }
-  $('session-note').textContent = `${set.reviewed || 0} ${(set.reviewed || 0) === 1 ? 'card' : 'cards'} reviewed · Progress saved as you go`;
+  const nextPile = {red: 'Getting there', amber: 'Got it', green: 'Got it'}[card.pile];
+  $('study').innerHTML = `<div class="study-top"><span>Weighted shuffle &nbsp; / &nbsp; ${labels[card.pile][0]}</span><button data-action="undo" ${undo ? '' : 'disabled'}>↶ Undo last</button></div><div class="card-content"><div class="card-label">${session.revealed ? 'HOW DID YOU DO?' : 'THINK IT THROUGH'}</div><div class="question">${esc(card.front)}</div>${session.revealed ? `<div class="answer">${esc(card.back)}</div>` : ''}</div>${session.revealed ? `<div class="ratings"><button class="rate red" data-rate="wrong">I got it wrong<small>Back to Learning</small><kbd>1</kbd></button><button class="rate green" data-rate="right">I got it right<small>${card.pile === 'green' ? 'Stays in Got it' : 'Moves to ' + nextPile}</small><kbd>2</kbd></button></div>` : '<button class="button dark reveal" data-action="reveal">Reveal answer <span>↵</span></button>'}`;
+  $('session-note').textContent = `${set.reviewed || 0} ${(set.reviewed || 0) === 1 ? 'card' : 'cards'} reviewed · Saved as you go`;
+  $('shuffle-note').hidden = false;
 }
-function start(pile) {
-  const set = current(); if (!set) { openImport(); return; }
-  set.session = {pile, queue: set.cards.filter(c => pile === 'all' || c.pile === pile).map(c => c.id), revealed: false};
-  set.session.total = set.session.queue.length; undo = null; save(); render(); $('study').focus({preventScroll:true});
+function reveal() {
+  const set = current(); if (!set?.session?.current) return;
+  set.session.revealed = true; save(); render(); $('study').focus({preventScroll:true});
 }
-function reveal() { const set = current(); if (!set?.session?.queue.length) return; set.session.revealed = true; save(); render(); $('study').focus({preventScroll:true}); }
-function rate(pile) {
-  const set = current(); if (!set?.session?.revealed || !set.session.queue.length) return;
-  undo = JSON.stringify(set); moveCard(set, set.session.queue[0], pile); save(); render(); $('study').focus({preventScroll:true});
+function rate(result) {
+  const set = current(); if (!set?.session?.revealed || !set.session.current) return;
+  undo = JSON.stringify(set); gradeCard(set, result === 'right'); save(); render(); $('study').focus({preventScroll:true});
 }
 function restore() {
   if (!undo) return;
@@ -56,17 +55,16 @@ function restore() {
 function openImport() { $('import-dialog').showModal(); }
 $('import').onclick = openImport; $('new-set').onclick = openImport;
 $('library').onclick = e => { const item = e.target.closest('[data-set]'); if (item) { state.selected = item.dataset.set; undo = null; save(); render(); } };
-$('piles').onclick = e => { const item = e.target.closest('[data-pile]'); if (item) start(item.dataset.pile); };
 $('study').onclick = e => {
   const rating = e.target.closest('[data-rate]'); if (rating) { rate(rating.dataset.rate); return; }
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (action === 'import') openImport();
   if (action === 'demo') addSet('The science of learning', [ ['What is active recall?', 'Retrieving information from memory without looking at the answer. Testing yourself with flashcards is one way to practise it.'], ['What is spaced repetition?', 'Reviewing information at intervals over time, instead of doing all your practice in a single session.'], ['Why does sleep help learning?', 'Sleep supports memory consolidation: the process of strengthening and organising newly learned information.'], ['What is interleaving?', 'Mixing related topics or problem types during practice, so you learn to recognise when to use different approaches.'], ['What is the Feynman technique?', 'Explaining an idea in simple language, spotting gaps in your understanding, and revisiting those gaps.'] ]);
-  if (action === 'reveal') reveal(); if (action === 'undo') restore(); if (action === 'again') start(current().session.pile); if (action === 'all') start('all');
+  if (action === 'reveal') reveal(); if (action === 'undo') restore();
 };
 function addSet(name, pairs) {
   const set = {id: crypto.randomUUID(), name, reviewed: 0, cards: pairs.map(([front,back]) => ({id: crypto.randomUUID(), front, back, pile: 'red'}))};
-  state.sets.push(set); state.selected = set.id; start('red'); $('import-dialog').close(); pending = null; $('mapping').hidden = true; toast(`${set.cards.length} cards ready. Start with the red pile.`);
+  prepareSession(set); state.sets.push(set); state.selected = set.id; undo = null; save(); render(); $('import-dialog').close(); pending = null; $('mapping').hidden = true; toast(`${set.cards.length} cards ready. Let’s start learning.`);
 }
 $('dropzone').onclick = () => $('file').click();
 $('file').onchange = async e => { if (e.target.files[0]) await readFile(e.target.files[0]); e.target.value = ''; };
@@ -104,7 +102,7 @@ $('confirm-import').onclick = () => {
 document.addEventListener('keydown', e => {
   if ($('import-dialog').open || ['INPUT','SELECT','TEXTAREA','BUTTON','A'].includes(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); reveal(); }
-  if (['1','2','3'].includes(e.key)) rate(['red','amber','green'][Number(e.key)-1]);
+  if (['1','2'].includes(e.key)) rate(e.key === '1' ? 'wrong' : 'right');
 });
-window.addEventListener('storage', e => { if (e.key === STORAGE && e.newValue) { try { const next = JSON.parse(e.newValue); if (Array.isArray(next.sets)) { state = next; undo = null; render(); } } catch {} } });
+window.addEventListener('storage', e => { if (e.key === STORAGE && e.newValue) { try { const next = JSON.parse(e.newValue); if (Array.isArray(next.sets)) { state = next; state.sets.forEach(prepareSession); undo = null; render(); } } catch {} } });
 render();
