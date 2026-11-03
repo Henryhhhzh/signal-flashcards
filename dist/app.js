@@ -1,3 +1,5 @@
+import {awardReview, rewardStats} from './rewards.js';
+import {celebrate, clearEffects, playTone} from './effects.js';
 import {moveToPile, updateSetDetails, groupSets} from './organize.js';
 import {parseCSV, columnsFor, prepareSession, gradeCard} from './core.js';
 const $ = id => document.getElementById(id);
@@ -19,6 +21,7 @@ let toastTimer;
 function toast(message) { $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 2400); }
 function render() {
   const set = current();
+  renderArcade(set);
   $('set-count').textContent = state.sets.length;
   $('library').innerHTML = groupSets(state.sets).map(group => `<section class="library-group"><h3>${esc(group.name || 'Ungrouped')}<span>${group.sets.length}</span></h3>${group.sets.map(s => `<button class="set-item ${s.id === state.selected ? 'active' : ''}" data-set="${esc(s.id)}" ${s.id === state.selected ? 'aria-current="true"' : ''}><span class="set-icon">▤</span><span><strong>${esc(s.name)}</strong><small>${s.cards.length} cards · ${Math.round(s.cards.filter(c => c.pile === 'green').length / s.cards.length * 100)}% green</small></span></button>`).join('')}</section>`).join('');
   const boardVisible = !!set && state.view === 'board';
@@ -68,20 +71,24 @@ function rate(result) {
   const card = set.cards.find(card => card.id === set.session.current);
   const previous = labels[card.pile][0];
   undo = JSON.stringify(set); gradeCard(set, result === 'right');
+  const reward = state.adhdMode ? awardReview(set, result === 'right') : null;
   feedbackTone = result === 'right' ? 'green' : 'red';
   feedback = `${result === 'right' ? '✓ Right' : '↩ Wrong'} · ${previous === labels[card.pile][0] ? 'Stays in ' + previous : previous + ' → ' + labels[card.pile][0]}`;
+  if (reward) feedback += ` · +${reward.points} XP${reward.streak > 1 ? ' · ' + reward.streak + ' in a row' : ''}`;
   save(); render(); animateStudy('next-card');
+  if (reward) { celebrate(reward); if (state.arcadeSound) playTone(reward.levelUp || reward.milestone ? 'big' : result); }
   document.querySelector(`[data-open-pile="${card.pile}"]`)?.classList.add('pile-updated');
   $('study').focus({preventScroll:true});
 }
 function restore() {
   if (!undo) return;
   state.sets[state.sets.findIndex(s => s.id === state.selected)] = JSON.parse(undo);
+  clearEffects();
   undo = null; feedback = 'Last answer undone.'; feedbackTone = ''; save(); render(); $('study').focus({preventScroll:true});
 }
 function openImport() { $('import-dialog').showModal(); }
 $('import').onclick = openImport; $('new-set').onclick = openImport;
-$('library').onclick = e => { const item = e.target.closest('[data-set]'); if (item) { state.selected = item.dataset.set; undo = null; feedback = ''; save(); render(); } };
+$('library').onclick = e => { const item = e.target.closest('[data-set]'); if (item) { state.selected = item.dataset.set; clearEffects(); undo = null; feedback = ''; save(); render(); } };
 $('study').onclick = e => {
   const rating = e.target.closest('[data-rate]'); if (rating) { rate(rating.dataset.rate); return; }
   const action = e.target.closest('[data-action]')?.dataset.action;
@@ -141,6 +148,7 @@ function renderBoard(set) {
   }).join('')}</div>`;
 }
 function changeView(view, pile = null) {
+  clearEffects();
   state.view = view; feedback = ''; save(); render();
   if (view === 'board') $('column-' + (pile || 'red')).focus();
   else $('study').focus({preventScroll:true});
@@ -219,3 +227,29 @@ function animateStudy(name) {
   void study.offsetWidth;
   study.classList.add(name);
 }
+
+function renderArcade(set) {
+  const enabled = !!state.adhdMode;
+  document.body.classList.toggle('adhd-mode', enabled);
+  $('adhd-toggle').checked = enabled;
+  $('arcade-hud').hidden = !enabled || !set;
+  if (!enabled) { clearEffects(); return; }
+  const stats = rewardStats(set);
+  $('arcade-level').textContent = stats.level;
+  $('arcade-xp').textContent = `${stats.xp} XP`;
+  $('arcade-next').textContent = `${100 - stats.progress} to level ${stats.level + 1}`;
+  $('arcade-progress').value = stats.progress;
+  $('arcade-streak').textContent = stats.streak;
+  const completed = stats.answered % 5;
+  $('arcade-mission').textContent = `${completed} / 5 reviews → +50 XP`;
+  $('mission-dots').innerHTML = Array.from({length:5},(_,i)=>`<i class="${i < completed ? 'complete' : ''}"></i>`).join('');
+  $('arcade-sound').textContent = state.arcadeSound ? '♫ Sound on' : '♪ Sound off';
+  $('arcade-sound').setAttribute('aria-pressed', String(!!state.arcadeSound));
+}
+$('adhd-toggle').onchange = e => {
+  state.adhdMode = e.target.checked; clearEffects(); feedback = ''; save(); render();
+};
+$('arcade-sound').onclick = () => {
+  state.arcadeSound = !state.arcadeSound; save(); renderArcade(current());
+  if (state.arcadeSound) playTone('right');
+};
