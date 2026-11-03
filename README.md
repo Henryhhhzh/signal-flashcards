@@ -48,6 +48,10 @@ Manual moves save immediately and affect the weighted study shuffle. They do not
 
 Choose **Rename & group** beside the set title to rename it and assign a group. Type a new group name or choose an existing one; clear the field to return the set to **Ungrouped**. The library displays sets under their group headings. Names, group membership, and your selected view are saved in the same browser as your cards.
 
+## Interaction feedback
+
+The study view shows the result and pile destination after each answer, plus a compact count of cards in Got it. Answer reveals, new cards, and manual moves use brief transitions; reduced-motion preferences disable them. Holding a shortcut key does not submit repeated answers.
+
 ## Keyboard controls
 
 - **Space / Enter:** reveal the answer.
