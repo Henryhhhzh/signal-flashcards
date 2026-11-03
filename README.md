@@ -52,6 +52,18 @@ Choose **Rename & group** beside the set title to rename it and assign a group. 
 
 The study view shows the result and pile destination after each answer, plus a compact count of cards in Got it. Answer reveals, new cards, and manual moves use brief transitions; reduced-motion preferences disable them. Holding a shortcut key does not submit repeated answers.
 
+## ADHD mode
+
+Use the **⚡ ADHD mode** switch in the header for the optional neon arcade interface. It adds XP, levels, correct-answer streaks, confetti, reward banners, and a five-review bonus. The switch stays accessible while scrolling. Turning it off restores the normal interface immediately.
+
+- Correct answers earn 20 XP, plus 5 XP for each additional correct answer in the streak, capped at 40 XP per answer.
+- Incorrect answers earn 5 XP for completing a review and reset the current streak.
+- Every five reviews earns another 50 XP. Each 100 XP advances a level.
+- Scores are saved per set, and undo reverses the last answer’s rewards along with its pile change.
+- Sound effects are optional, initially off, and controlled by the **Sound** button in the score panel.
+
+The mode and sound preferences save in your browser. Normal mode uses the same flashcards and pile rules, and does not award points. Reduced-motion preferences disable animations. This is an optional visual style and reward system, not a clinical feature.
+
 ## Keyboard controls
 
 - **Space / Enter:** reveal the answer.
@@ -79,6 +91,8 @@ dist/
   app.js              Study interface, imports, and browser persistence
   core.js             CSV parser, weighted selection, and pile progression
   organize.js         Manual pile moves, set details, and library grouping
+  rewards.js          XP, streaks, levels, and review bonuses
+  effects.js          Confetti, reward banners, and optional sound
 tests/
   study.test.mjs      Study behaviour regression tests
   organize.test.mjs   Manual moves, grouping, and saved-data regression tests
