@@ -40,6 +40,14 @@ What is spaced repetition?,Reviewing information at intervals over time.
 
 `Front/Back` and `Term/Definition` headers are also recognised. Headerless files work too: confirm the columns and leave **First row contains column names** unchecked.
 
+## Organise your cards and sets
+
+Click any of the three pile tiles, or **All cards**, to open the board. All three piles appear side by side, with every card in its current pile. Drag cards between columns, or use a card’s **Move to** menu with a keyboard or touch screen. Expand **Show answer** to see the back of a card. On narrow screens, swipe the board horizontally to reach each column.
+
+Manual moves save immediately and affect the weighted study shuffle. They do not count as reviewed answers or change your current study card. Switch back to **Study** to continue.
+
+Choose **Rename & group** beside the set title to rename it and assign a group. Type a new group name or choose an existing one; clear the field to return the set to **Ungrouped**. The library displays sets under their group headings. Names, group membership, and your selected view are saved in the same browser as your cards.
+
 ## Keyboard controls
 
 - **Space / Enter:** reveal the answer.
@@ -53,7 +61,7 @@ The last answer can be undone using **Undo last**. Undo is available during the 
 Use a modern Node.js version with the built-in test runner (Node.js 22 or later recommended):
 
 ```sh
-node --test tests/study.test.mjs
+node --test tests/*.test.mjs
 ```
 
 Tests cover pile advancement and resets, the 9:3:1 distribution, small sets and empty piles, and migration of saved sessions from the original study flow.
@@ -66,8 +74,10 @@ dist/
   style.css           Responsive visual design
   app.js              Study interface, imports, and browser persistence
   core.js             CSV parser, weighted selection, and pile progression
+  organize.js         Manual pile moves, set details, and library grouping
 tests/
   study.test.mjs      Study behaviour regression tests
+  organize.test.mjs   Manual moves, grouping, and saved-data regression tests
 ```
 
 The site can be hosted on any static web host. Fonts are loaded from Google Fonts, with system font fallbacks.
