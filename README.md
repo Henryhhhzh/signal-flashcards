@@ -1,0 +1,77 @@
+# Signal Flashcards
+
+A quiet flashcard study website for CSV sets exported from NotebookLM. Import a set, reveal each answer, and choose **I got it right** or **I got it wrong**.
+
+## How studying works
+
+Cards live in three traffic-light piles:
+
+- **Learning (red):** a correct answer moves the card to Getting there.
+- **Getting there (amber):** a correct answer moves the card to Got it.
+- **Got it (green):** a correct answer keeps the card here.
+
+An incorrect answer returns a card to Learning from any pile. New cards start in Learning.
+
+The next card comes from a weighted random pile: **Learning 9 : Getting there 3 : Got it 1**. With all three piles populated, those probabilities are approximately 69%, 23%, and 8%. Empty piles are skipped. After selecting a pile, a card is chosen randomly within it; the previous card is avoided when that pile has another card available. A one-card pile can repeat to preserve the weighting.
+
+Sets, pile assignments, the current card, and answer visibility save automatically in `localStorage`. Return using the **same browser, device, and site address** to continue. This is browser-local storage, with no cross-device sync; clearing browser data removes saved progress. CSV files are processed in your browser.
+
+## Run locally
+
+No dependencies or build step are needed. `dist/` contains the maintained HTML, CSS, and JavaScript source.
+
+From the repository root, run:
+
+```sh
+python3 -m http.server 4173 --directory dist
+```
+
+Open [http://localhost:4173](http://localhost:4173).
+
+## Import a CSV
+
+Choose **Import CSV**, select a file, check the question and answer columns, then import. Files can be up to 5 MB. Quoted commas, escaped quotation marks, and multiline fields are supported. Incomplete rows are skipped, with a count shown before import.
+
+```csv
+Question,Answer
+What is active recall?,Retrieving information from memory without looking at the answer.
+What is spaced repetition?,Reviewing information at intervals over time.
+```
+
+`Front/Back` and `Term/Definition` headers are also recognised. Headerless files work too: confirm the columns and leave **First row contains column names** unchecked.
+
+## Keyboard controls
+
+- **Space / Enter:** reveal the answer.
+- **1:** I got it wrong.
+- **2:** I got it right.
+
+The last answer can be undone using **Undo last**. Undo is available during the current page session.
+
+## Tests
+
+Use a modern Node.js version with the built-in test runner (Node.js 22 or later recommended):
+
+```sh
+node --test tests/study.test.mjs
+```
+
+Tests cover pile advancement and resets, the 9:3:1 distribution, small sets and empty piles, and migration of saved sessions from the original study flow.
+
+## Project layout
+
+```text
+dist/
+  index.html          Page structure and CSV import dialog
+  style.css           Responsive visual design
+  app.js              Study interface, imports, and browser persistence
+  core.js             CSV parser, weighted selection, and pile progression
+tests/
+  study.test.mjs      Study behaviour regression tests
+```
+
+The site can be hosted on any static web host. Fonts are loaded from Google Fonts, with system font fallbacks.
+
+## Development history
+
+The first two commits reconstruct the two real saved development versions: the initial CSV app with manual pile sorting, followed by the two-button weighted study flow. Regression tests and this documentation are separate follow-up commits. The history is grouped by completed work; it does not represent a recording of every edit made during development.
