@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {moveToPile, updateSetDetails, groupSets} from '../dist/organize.js';
-const makeState = () => ({sets:[{id:'s',name:'Biology',cards:[{id:'a',pile:'red',front:'Question',back:'Answer'}],reviewed:5,session:{mode:'weighted',current:'a',revealed:true,answered:5}}],selected:'s'});
+const makeState = () => ({sets:[{id:'s',name:'Biology',cards:[{id:'a',pile:'red',front:'Question',back:'Answer'}],reviewed:5,session:{mode:'queue',queue:['a'],current:'a',total:1,revealed:true,answered:0}}],selected:'s'});
 test('manual moves preserve the study position, content and review counts', () => {
   const state=makeState(), set=state.sets[0], session=structuredClone(set.session);
   for(const pile of ['green','amber','red']) { moveToPile(set,'a',pile); assert.equal(set.cards[0].pile,pile); }

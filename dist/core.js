@@ -24,33 +24,39 @@ export function columnsFor(rows) {
   const back = headers.findIndex(x => ['answer','back','definition','response','a'].includes(x));
   return {front: front < 0 ? 0 : front, back: back < 0 ? 1 : back, header: front >= 0 && back >= 0};
 }
-export const pileWeights = {red: 9, amber: 3, green: 1};
-export function pickNext(cards, previousId = null, random = Math.random) {
-  const piles = Object.entries(pileWeights).map(([pile, weight]) => ({weight, cards: cards.filter(card => card.pile === pile)})).filter(group => group.cards.length);
-  if (!piles.length) return null;
-  let draw = random() * piles.reduce((sum, group) => sum + group.weight, 0);
-  let chosen = piles[piles.length - 1];
-  for (const group of piles) {
-    draw -= group.weight;
-    if (draw < 0) { chosen = group; break; }
-  }
-  const candidates = chosen.cards.length > 1 ? chosen.cards.filter(card => card.id !== previousId) : chosen.cards;
-  return candidates[Math.floor(random() * candidates.length)].id;
+export function startPass(set) {
+  const queue = set.cards.map(card => card.id);
+  set.session = {mode: 'queue', queue, current: queue[0] || null, total: queue.length, answered: 0, revealed: false};
 }
 export function prepareSession(set) {
-  if (set.session?.mode === 'weighted') return;
-  set.session = {
-    mode: 'weighted',
-    current: set.session?.queue?.[0] || pickNext(set.cards),
-    revealed: set.session?.revealed || false,
-    answered: 0
-  };
+  if (set.session?.mode === 'queue') return;
+  const previous = set.session;
+  const ids = set.cards.map(card => card.id);
+  let queue;
+  if (Array.isArray(previous?.queue)) {
+    const valid = new Set(ids);
+    queue = [...new Set(previous.queue)].filter(id => valid.has(id));
+  } else {
+    queue = ids.includes(previous?.current) ? [previous.current, ...ids.filter(id => id !== previous.current)] : ids;
+  }
+  set.session = {mode: 'queue', queue, current: queue[0] || null, total: queue.length, answered: 0, revealed: !!previous?.revealed && queue.length > 0};
 }
-export function gradeCard(set, correct, random = Math.random) {
-  const card = set.cards.find(c => c.id === set.session.current);
+export function shuffleQueue(set, random = Math.random) {
+  const session = set.session;
+  if (session.queue.length < 2) return;
+  for (let i = session.queue.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [session.queue[i], session.queue[j]] = [session.queue[j], session.queue[i]];
+  }
+  session.current = session.queue[0];
+  session.revealed = false;
+}
+export function gradeCard(set, correct) {
+  const card = set.cards.find(card => card.id === set.session.current);
   if (!card) return;
   card.pile = correct ? {red: 'amber', amber: 'green', green: 'green'}[card.pile] : 'red';
-  set.session.current = pickNext(set.cards, card.id, random);
+  set.session.queue.shift();
+  set.session.current = set.session.queue[0] || null;
   set.session.revealed = false;
   set.session.answered += 1;
   set.reviewed = (set.reviewed || 0) + 1;
