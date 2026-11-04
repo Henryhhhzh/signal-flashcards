@@ -12,7 +12,9 @@ Cards live in three traffic-light piles:
 
 An incorrect answer returns a card to Learning from any pile. New cards start in Learning.
 
-The next card comes from a weighted random pile: **Learning 9 : Getting there 3 : Got it 1**. With all three piles populated, those probabilities are approximately 69%, 23%, and 8%. Empty piles are skipped. After selecting a pile, a card is chosen randomly within it; the previous card is avoided when that pile has another card available. A one-card pile can repeat to preserve the weighting.
+Each set uses a saved background queue. Cards start in CSV order and each appears once per pass, even when answered incorrectly. **Shuffle** randomly reorders only the cards you have not yet answered (including the card currently on screen); it never reintroduces completed cards. The queue itself is not shown. A card counter shows your place, and **Start next pass** begins another complete pass after you finish. Your queue and position survive reopening the site.
+
+When upgrading from the old random study flow, your currently displayed card stays first and the other cards form a new pass. Piles, sets, and XP are preserved.
 
 Sets, pile assignments, the current card, and answer visibility save automatically in `localStorage`. Return using the **same browser, device, and site address** to continue. This is browser-local storage, with no cross-device sync; clearing browser data removes saved progress. CSV files are processed in your browser.
 
@@ -50,7 +52,7 @@ What is spaced repetition?,Reviewing information at intervals over time.
 
 Click any of the three pile tiles, or **All cards**, to open the board. All three piles appear side by side, with every card in its current pile. Drag cards between columns, or use a card’s **Move to** menu with a keyboard or touch screen. Expand **Show answer** to see the back of a card. On narrow screens, swipe the board horizontally to reach each column.
 
-Manual moves save immediately and affect the weighted study shuffle. They do not count as reviewed answers or change your current study card. Switch back to **Study** to continue.
+Manual moves save immediately and update the pile assignment. They do not count as reviewed answers or change your current study card. Switch back to **Study** to continue.
 
 Choose **Rename & group** beside the set title to rename it and assign a group. Type a new group name or choose an existing one; clear the field to return the set to **Ungrouped**. The library displays sets under their group headings. Names, group membership, and your selected view are saved in the same browser as your cards.
 
@@ -86,7 +88,7 @@ Use a modern Node.js version with the built-in test runner (Node.js 22 or later 
 node --test tests/*.test.mjs
 ```
 
-Tests cover pile advancement and resets, the 9:3:1 distribution, small sets and empty piles, and migration of saved sessions from the original study flow.
+Tests cover pile advancement, no-repeat passes, shuffling only remaining cards, queue persistence and migration, manual moves, grouping, and arcade rewards.
 
 ## Project layout
 
@@ -95,7 +97,7 @@ dist/
   index.html          Page structure and CSV import dialog
   style.css           Responsive visual design
   app.js              Study interface, imports, and browser persistence
-  core.js             CSV parser, weighted selection, and pile progression
+  core.js             CSV parser, study queue, shuffle, and pile progression
   organize.js         Manual pile moves, set details, and library grouping
   rewards.js          XP, streaks, levels, and review bonuses
   effects.js          Confetti, reward banners, and optional sound

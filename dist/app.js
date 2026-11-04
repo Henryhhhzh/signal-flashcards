@@ -1,7 +1,7 @@
 import {awardReview, rewardStats} from './rewards.js';
 import {celebrate, clearEffects, playTone} from './effects.js';
 import {moveToPile, updateSetDetails, groupSets} from './organize.js';
-import {parseCSV, columnsFor, prepareSession, gradeCard} from './core.js';
+import {parseCSV, columnsFor, prepareSession, gradeCard, shuffleQueue, startPass} from './core.js';
 const $ = id => document.getElementById(id);
 const STORAGE = 'signal-flashcards-v1';
 const labels = {red: ['Learning', ''], amber: ['Getting there', ''], green: ['Got it', '']};
@@ -41,6 +41,8 @@ function render() {
   }
   $('edit-set').hidden = !set;
   $('view-toolbar').hidden = !set;
+  $('shuffle-cards').hidden = boardVisible || !set;
+  $('shuffle-cards').disabled = !set || set.session.queue.length < 2;
   $('study-view').setAttribute('aria-pressed', String(!boardVisible));
   $('board-view').setAttribute('aria-pressed', String(boardVisible));
   $('set-title').textContent = set?.name || 'Flashcards';
@@ -54,11 +56,12 @@ function render() {
   const session = set.session;
   const card = set.cards.find(c => c.id === session.current);
   if (!card) {
-    $('study').innerHTML = '<div class="card-content empty"><h3>No cards in this set.</h3><button class="button dark" data-action="import">Import flashcards</button></div>';
+    $('study').innerHTML = set.cards.length ? `<div class="card-content empty"><div class="empty-icon">✓</div><h3>Pass complete</h3><p>${session.total} / ${session.total} cards reviewed</p><button class="button dark" data-action="next-pass">Start next pass</button>${undo ? '<br><button class="text-button" data-action="undo">↶ Undo last</button>' : ''}</div>` : '<div class="card-content empty"><h3>No cards in this set.</h3><button class="button dark" data-action="import">Import flashcards</button></div>';
+    $('session-note').textContent = `${set.reviewed || 0} cards reviewed total`;
     return;
   }
   const nextPile = {red: 'Getting there', amber: 'Got it', green: 'Got it'}[card.pile];
-  $('study').innerHTML = `<div class="study-top"><span> ${labels[card.pile][0]}</span><button data-action="undo" ${undo ? '' : 'disabled'}>↶ Undo last</button></div><div class="card-content"><div class="card-label">${session.revealed ? 'QUESTION & ANSWER' : 'QUESTION'}</div><div class="question">${esc(card.front)}</div>${session.revealed ? `<div class="answer">${esc(card.back)}</div>` : ''}</div>${session.revealed ? `<div class="ratings"><button class="rate red" data-rate="wrong">I got it wrong<small>Back to Learning</small><kbd>1</kbd></button><button class="rate green" data-rate="right">I got it right<small>${card.pile === 'green' ? 'Stays in Got it' : 'Moves to ' + nextPile}</small><kbd>2</kbd></button></div>` : '<button class="button dark reveal" data-action="reveal">Reveal answer <span>↵</span></button>'}`;
+  $('study').innerHTML = `<div class="study-top"><span>Card ${session.answered + 1} of ${session.total} · ${labels[card.pile][0]}</span><button data-action="undo" ${undo ? '' : 'disabled'}>↶ Undo last</button></div><div class="card-content"><div class="card-label">${session.revealed ? 'QUESTION & ANSWER' : 'QUESTION'}</div><div class="question">${esc(card.front)}</div>${session.revealed ? `<div class="answer">${esc(card.back)}</div>` : ''}</div>${session.revealed ? `<div class="ratings"><button class="rate red" data-rate="wrong">I got it wrong<small>Back to Learning</small><kbd>1</kbd></button><button class="rate green" data-rate="right">I got it right<small>${card.pile === 'green' ? 'Stays in Got it' : 'Moves to ' + nextPile}</small><kbd>2</kbd></button></div>` : '<button class="button dark reveal" data-action="reveal">Reveal answer <span>↵</span></button>'}`;
   $('session-note').textContent = `${set.reviewed || 0} ${(set.reviewed || 0) === 1 ? 'card' : 'cards'} reviewed`;
 }
 function reveal() {
@@ -95,6 +98,9 @@ $('study').onclick = e => {
   if (action === 'import') openImport();
   if (action === 'demo') addSet('The science of learning', [ ['What is active recall?', 'Retrieving information from memory without looking at the answer. Testing yourself with flashcards is one way to practise it.'], ['What is spaced repetition?', 'Reviewing information at intervals over time, instead of doing all your practice in a single session.'], ['Why does sleep help learning?', 'Sleep supports memory consolidation: the process of strengthening and organising newly learned information.'], ['What is interleaving?', 'Mixing related topics or problem types during practice, so you learn to recognise when to use different approaches.'], ['What is the Feynman technique?', 'Explaining an idea in simple language, spotting gaps in your understanding, and revisiting those gaps.'] ]);
   if (action === 'reveal') reveal(); if (action === 'undo') restore();
+  if (action === 'next-pass') {
+    startPass(current()); clearEffects(); undo = null; feedback = ''; save(); render(); $('study').focus({preventScroll:true});
+  }
 };
 function addSet(name, pairs) {
   const set = {id: crypto.randomUUID(), name, reviewed: 0, cards: pairs.map(([front,back]) => ({id: crypto.randomUUID(), front, back, pile: 'red'}))};
@@ -252,4 +258,12 @@ $('adhd-toggle').onchange = e => {
 $('arcade-sound').onclick = () => {
   state.arcadeSound = !state.arcadeSound; save(); renderArcade(current());
   if (state.arcadeSound) playTone('right');
+};
+
+$('shuffle-cards').onclick = () => {
+  const set = current();
+  if (!set || set.session.queue.length < 2) return;
+  shuffleQueue(set); clearEffects(); undo = null;
+  feedback = 'Remaining cards shuffled.'; feedbackTone = '';
+  save(); render(); animateStudy('next-card'); $('study').focus({preventScroll:true});
 };
